@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>幾A幾B：博弈生存</title>
+    <style>
+        :root { --p: #2563eb; --d: #dc2626; --bg: #f8fafc; --text: #1e293b; --g: #10b981; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; display: flex; justify-content: center; min-height: 100vh; color: var(--text); }
+        .card { background: white; width: 100%; max-width: 500px; min-height: 100vh; padding: 20px; box-sizing: border-box; box-shadow: 0 0 20px rgba(0,0,0,0.1); position: relative; }
+        h3 { margin-top: 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; color: var(--p); }
+        label { display: block; margin-top: 15px; font-weight: bold; }
+        input, select, button { width: 100%; padding: 15px; margin-top: 8px; border-radius: 10px; border: 1px solid #cbd5e1; box-sizing: border-box; font-size: 16px; }
+        button { cursor: pointer; font-weight: bold; background: var(--p); color: white; border: none; transition: 0.2s; }
+        button:active { transform: scale(0.98); }
+        .btn-challenge { background: var(--d); margin-top: 10px; }
+        .btn-history { background: #64748b; margin-top: 10px; }
+        .log { margin-top: 20px; border-top: 2px solid #f1f5f9; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        td, th { padding: 12px 8px; border-bottom: 1px solid #f1f5f9; text-align: left; }
+        #modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-box { background: white; width: 90%; max-height: 85%; padding: 25px; border-radius: 20px; overflow-y: auto; }
+        .rule-section { margin-bottom: 20px; }
+        .rule-title { font-weight: bold; color: var(--p); border-left: 4px solid var(--p); padding-left: 10px; margin-bottom: 10px; }
+        .rule-list { padding-left: 20px; margin: 0; font-size: 0.9rem; line-height: 1.6; }
+        .highlight { color: var(--d); font-weight: bold; }
+        .record-tag { font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; color: white; }
+        .win { background: var(--g); } .lose { background: var(--d); }
+    </style>
+</head>
+<body>
+
+<div id="modal">
+    <div class="modal-box" id="modalContent">
+        <h2 style="margin-top:0; text-align:center;">遊戲規則與電腦思維</h2>
+        <div class="rule-section">
+            <div class="rule-title">經典規則</div>
+            <ul class="rule-list">
+                <li>0-9 數字，<span class="highlight">數字可以重複</span>。</li>
+                <li>m個A：數字正確且位置正確。</li>
+                <li>n個B：數字正確但位置錯誤。</li>
+            </ul>
+        </div>
+        <div class="rule-section">
+            <div class="rule-title">博弈機制</div>
+            <ul class="rule-list">
+                <li><span class="highlight">線索欺詐</span>：出題者可給錯誤線索，但若被電腦質疑成功則直接敗北。</li>
+                <li><span class="highlight">質疑權</span>：玩家懷疑電腦說謊時可發起質疑，失敗則直接出局。</li>
+                <li><span class="highlight">誠信鎖定</span>：出題前需輸入謎底，系統將自動比對誠信。</li>
+            </ul>
+        </div>
+        <div class="rule-section">
+            <div class="rule-title">電腦等級</div>
+            <ul class="rule-list">
+                <li>低級：隨機猜測。 高級：邏輯縮小集合。</li>
+                <li>惡魔：算力完美，任何邏輯矛盾必質疑。</li>
+                <li>超級人性(答題限定)：在特定輪次說謊引誘你質疑。</li>
+            </ul>
+        </div>
+        <button onclick="document.getElementById('modal').style.display='none'">了解規則</button>
+    </div>
+</div>
+
+<div class="card">
+    <h3>幾A幾B：博弈生存</h3>
+    <div id="setup">
+        <label>選擇角色</label>
+        <select id="role" onchange="toggleAiOptions()"><option value="guesser">答題者 (猜電腦)</option><option value="maker">出題者 (電腦猜你)</option></select>
+        <label>挑戰位數</label>
+        <select id="digits"><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select>
+        <label>電腦等級</label>
+        <select id="ai"></select>
+        <button onclick="preInit()">進入遊戲</button>
+        <button class="btn-history" onclick="showHistory()">歷史成績</button>
+    </div>
+
+    <div id="play" style="display:none;">
+        <p id="info" style="font-weight:bold; color:var(--p);"></p>
+        <div id="guesserUI">
+            <input type="number" id="gVal" placeholder="輸入猜測數字">
+            <button onclick="handlePlayerGuess()">提交猜測</button>
+            <button class="btn-challenge" onclick="playerAttemptChallenge()">發起質疑！</button>
+        </div>
+        <div id="makerUI" style="display:none;">
+            <div id="aiGuessShow" style="background:#fef9c3; padding:15px; border-radius:10px; font-weight:bold; border: 1px solid #fde68a;"></div>
+            <div style="display:flex; gap:10px; margin-top:10px;"><input type="number" id="inA" placeholder="A"><input type="number" id="inB" placeholder="B"></div>
+            <button onclick="handlePlayerClue()">給出線索</button>
+        </div>
+        <div class="log"><table><thead><tr><th>輪次</th><th>猜測</th><th>結果</th></tr></thead><tbody id="history"></tbody></table></div>
+        <button class="btn-history" style="margin-top:20px;" onclick="resetGame()">回主選單</button>
+    </div>
+</div>
+
+<script>
+let s = { rounds: 0, pool: [], history: [], currentAiGuess: '', secretAns: '', ai: '', digits: 4, lieRound: 0 };
+const originalModalHTML = document.getElementById('modalContent').innerHTML;
+
+function toggleAiOptions() {
+    const role = document.getElementById('role').value;
+    const aiSelect = document.getElementById('ai');
+    aiSelect.innerHTML = '<option value="low">低級</option><option value="high">高級</option><option value="evil">惡魔</option>';
+    if(role === 'guesser') aiSelect.innerHTML += '<option value="human">超級人性</option>';
+}
+toggleAiOptions();
+
+function resetGame() {
+    // 重置所有變數與介面，不使用 location.reload()
+    s = { rounds: 0, pool: [], history: [], currentAiGuess: '', secretAns: '', ai: '', digits: 4, lieRound: 0 };
+    document.getElementById('play').style.display = 'none';
+    document.getElementById('setup').style.display = 'block';
+    document.getElementById('history').innerHTML = '';
+    document.getElementById('modalContent').innerHTML = originalModalHTML;
+}
+
+function preInit() {
+    s.digits = parseInt(document.getElementById('digits').value);
+    s.role = document.getElementById('role').value;
+    s.ai = document.getElementById('ai').value;
+    
+    if(s.role === 'maker') {
+        document.getElementById('modalContent').innerHTML = `
+            <h2 style="text-align:center;margin-top:0;">鎖定謎底</h2>
+            <p>請輸入你的 ${s.digits} 位謎底：</p>
+            <input type="number" id="realSecret" placeholder="在此輸入數字">
+            <button onclick="initGame(document.getElementById('realSecret').value)">確認鎖定並開始</button>
+        `;
+        document.getElementById('modal').style.display = 'flex';
+    } else {
+        initGame();
+    }
+}
+
+function initGame(secretInput) {
+    if(s.role === 'maker') {
+        if(!secretInput || secretInput.length !== s.digits) return alert(`請輸入正確的 ${s.digits} 位數字`);
+        s.secretAns = secretInput;
+        const max = Math.pow(10, s.digits);
+        s.pool = [];
+        for(let i=0; i<max; i++) s.pool.push(i.toString().padStart(s.digits, '0'));
+    } else {
+        s.secretAns = Array.from({length:s.digits},()=>Math.floor(Math.random()*10)).join('');
+        s.lieRound = Math.floor(Math.random() * 4) + 4; 
+    }
+    
+    document.getElementById('modal').style.display = 'none';
+    document.getElementById('setup').style.display = 'none';
+    document.getElementById('play').style.display = 'block';
+    document.getElementById('info').innerText = s.role === 'guesser' ? `正在挑戰電腦的謎題` : `博弈中：系統已監控謎底`;
+    
+    if(s.role === 'maker') {
+        document.getElementById('makerUI').style.display = 'block';
+        document.getElementById('guesserUI').style.display = 'none';
+        nextAiGuess();
+    } else {
+        document.getElementById('makerUI').style.display = 'none';
+        document.getElementById('guesserUI').style.display = 'block';
+    }
+}
+
+function getAB(ans, gue) {
+    let a=0, b=0, sA=[...ans], gA=[...gue], sU=Array(sA.length).fill(0), gU=Array(gA.length).fill(0);
+    for(let i=0; i<sA.length; i++) if(sA[i]===gA[i]){ a++; sU[i]=gU[i]=1; }
+    for(let i=0; i<gA.length; i++){ if(gU[i]) continue; for(let j=0; j<sA.length; j++){ if(!sU[j] && gA[i]===sA[j]){ b++; sU[j]=1; break; } } }
+    return {a, b};
+}
+
+function handlePlayerGuess() {
+    const el = document.getElementById('gVal');
+    let val = el.value.padStart(s.digits, '0');
+    if(val.length > s.digits) val = val.slice(-s.digits);
+    s.rounds++;
+    let res = getAB(s.secretAns, val);
+    if(s.ai === 'human' && s.rounds === s.lieRound && res.a < s.digits) res.a = Math.max(0, res.a - 1);
+    addHistory(s.rounds, val, `${res.a}A${res.b}B`);
+    el.value = '';
+    if(res.a === s.digits) { alert("你贏了！"); saveAndEnd(true); }
+}
+
+function handlePlayerClue() {
+    const a = parseInt(document.getElementById('inA').value || 0);
+    const b = parseInt(document.getElementById('inB').value || 0);
+    addHistory(++s.rounds, s.currentAiGuess, `${a}A${b}B`);
+    const newPool = s.pool.filter(num => { const check = getAB(num, s.currentAiGuess); return check.a === a && check.b === b; });
+    if(newPool.length === 0 && (s.ai === 'evil' || s.ai === 'high')) { alert("【質疑！】電腦判定你在說謊！你輸了。"); saveAndEnd(false); return; }
+    s.pool = newPool;
+    if(a === s.digits) { if(s.secretAns === s.currentAiGuess) { alert("電腦猜對了！"); saveAndEnd(false); } else { alert("誠信失敗！"); saveAndEnd(false); } }
+    else nextAiGuess();
+}
+
+function nextAiGuess() {
+    if(s.pool.length === 0) { alert("電腦無法找到答案，你說謊了！"); saveAndEnd(false); return; }
+    const idx = s.ai === 'low' ? Math.floor(Math.random()*s.pool.length) : Math.floor(s.pool.length/2);
+    s.currentAiGuess = s.pool[idx];
+    document.getElementById('aiGuessShow').innerText = `電腦猜測：${s.currentAiGuess}`;
+    document.getElementById('inA').value = ''; document.getElementById('inB').value = '';
+}
+
+function playerAttemptChallenge() {
+    if(s.ai === 'human' && s.rounds >= s.lieRound) { alert("質疑成功！電腦承認說謊。"); saveAndEnd(true); }
+    else { alert("質疑失敗！電腦沒說謊。你輸了。"); saveAndEnd(false); }
+}
+
+function saveAndEnd(win) {
+    let recs = JSON.parse(localStorage.getItem('ab_博弈紀錄') || '[]');
+    recs.unshift({ mode: s.role, win, rounds: s.rounds, date: new Date().toLocaleDateString() });
+    localStorage.setItem('ab_博弈紀錄', JSON.stringify(recs.slice(0, 10)));
+    resetGame();
+}
+
+function showHistory() {
+    let recs = JSON.parse(localStorage.getItem('ab_博弈紀錄') || '[]');
+    let html = `<h2 style="margin-top:0;text-align:center;">前十次成績</h2><table style="width:100%;"><tr><th>模式</th><th>勝敗</th><th>輪次</th></tr>`;
+    recs.forEach(r => html += `<tr><td>${r.mode==='guesser'?'猜題':'出題'}</td><td><span class="record-tag ${r.win?'win':'lose'}">${r.win?'勝':'敗'}</span></td><td>${r.rounds}</td></tr>`);
+    html += `</table><button onclick="resetGame()" style="margin-top:20px;">回主選單</button>`;
+    document.getElementById('modalContent').innerHTML = html;
+    document.getElementById('modal').style.display = 'flex';
+}
+
+function addHistory(r, g, res) {
+    const row = `<tr><td>${r}</td><td>${g}</td><td>${res}</td></tr>`;
+    document.getElementById('history').insertAdjacentHTML('afterbegin', row);
+}
+</script>
+</body>
+</html>
